@@ -1,0 +1,484 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document:
+    number_sections: yes
+    latex_engine: xelatex
+    highlight: zenburn
+    toc: yes
+always_allow_html: true
+---
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(gapminder)
+library(tidyr)
+library(countrycode)
+library(forcats)
+library(tidyverse)
+library(gifski)
+library(png)
+library(gganimate)
+library(ggthemes)
+library(hrbrthemes)
+library(GGally)
+library(viridis)
+```
+
+```{r}
+world <- map_data("world") %>%
+  filter(region != "Antarctica") %>% 
+  mutate(
+    continent = countrycode(sourcevar = region,
+                            origin = "country.name",
+                            destination = "continent"),
+  ) %>% 
+  drop_na(continent)
+
+glimpse(world, width = 50)
+
+png("myplot.png")
+
+continent_map <- ggplot(data = world) + 
+  geom_map(map = world,
+           aes(long, lat, group = group, map_id = region,
+               fill = continent)) +
+  theme_map() +
+  coord_map(xlim = c(-180, 180),
+            ylim = c(-200, 200)) +
+  scale_fill_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+  guides(fill = "none") +
+  theme(
+    plot.background = element_rect(color = "#B8C2CC", fill = NA)
+  )
+
+final_map <- ggplot(data = world) + 
+  geom_map(map = world,
+           aes(long, lat, group = group, map_id = region,
+               fill = continent)) +
+  theme_map() +
+  scale_fill_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+  guides(fill = FALSE) +
+  coord_map(xlim = c(-180, 180),
+            ylim = c(-200, 200))
+
+print(final_map)
+dev.off()
+
+```
+
+
+```{r message=FALSE, warning=FALSE, fig.height=10, fig.width=12}
+gapminder = read.csv('gapminder_full.csv')
+
+
+p <- ggplot(gapminder, aes(gdp_cap, life_exp)) +
+  geom_point(aes(size = population, frame = year, ids = country,  color = continent), alpha = 0.6) +
+  scale_x_log10() +
+  scale_color_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+  scale_size_continuous(range = c(1, 15)) +
+  labs(title = 'Gapminder',
+       subtitle = 'Gapminder',
+       x = 'Income per capita (Dollars)',
+       y = 'Life Expectancy (Year)') +
+  theme_minimal() 
+
+
+fig <- ggplotly(p) %>% 
+  animation_opts(
+    1000, easing = "elastic", redraw = FALSE
+  ) %>% 
+  animation_slider(
+    currentvalue = list(prefix = "YEAR ", font = list(color="red"))
+  )  %>%
+  layout(
+    images = list(
+      source = base64enc::dataURI(file = "myplot.png"),
+      x = 0.7, y = -0.03, 
+      sizex = 0.4, sizey = 0.4,
+      xref = "paper", yref = "paper", 
+      xanchor = "left", yanchor = "bottom"
+    )) %>%
+  layout(title = list(text = paste0('Evolution of life Expentancy over the years',
+                                    '<br>',
+                                    '<sup>',
+                                    'Life expectancy, income per capita and population by country (and continent) evolution every 5 years since 1952 ',
+                                    '</sup>')))
+fig
+```
+
+```{r}
+years_school = read.csv('mean-years-of-schooling-long-run.csv')
+colnames(years_school) <- c('country','code','year', 'years_school_avg')
+
+years_school$year[years_school$year == 1950] <- 1952
+years_school$year[years_school$year == 1955] <- 1957
+years_school$year[years_school$year == 1960] <- 1962
+years_school$year[years_school$year == 1965] <- 1967
+years_school$year[years_school$year == 1970] <- 1972
+years_school$year[years_school$year == 1975] <- 1977
+years_school$year[years_school$year == 1980] <- 1982
+years_school$year[years_school$year == 1985] <- 1987
+
+test <- merge(gapminder, years_school, by=c("country","year"), all.x= TRUE)
+test$code <- NULL
+
+test_2 <- na.omit(test) %>%
+  group_by(year, continent) %>%
+  summarise(a_mean=(mean(years_school_avg)))
+```
+
+```{r message=FALSE, warning=FALSE, fig.height=14, fig.width=10}
+accumulate_by <- function(dat, var) {
+  var <- lazyeval::f_eval(var, dat)
+  lvls <- plotly:::getLevels(var)
+  dats <- lapply(seq_along(lvls), function(x) {
+    cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
+  })
+  dplyr::bind_rows(dats)
+}
+
+p <- ggplot(test, aes(years_school_avg, life_exp, color = continent)) +
+  geom_point(aes(frame = year, ids = country), alpha = 0.6,  show.legend = FALSE) +
+  theme(legend.position="none") +
+  scale_color_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+  scale_size_continuous(range = c(1, 15)) +
+  labs(title = '',
+       subtitle = '',
+       x = 'years_school_avg',
+       y = 'life_exp') +
+  theme_minimal()
+
+fig1 <- ggplotly(p)
+
+
+
+p2 <- ggplot(test, aes(years_school_avg, gdp_cap)) +
+  geom_point(aes(frame = year, ids = country,  color = continent), alpha = 0.6, show.legend = FALSE) +
+  scale_y_log10() +
+  scale_color_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+  scale_size_continuous(range = c(1, 15)) +
+  labs(title = '',
+       subtitle = '',
+       x = 'years_school_avg',
+       y = 'gdp_cap') +
+  theme_minimal()
+
+fig2 <- ggplotly(p2 + guides(colour=FALSE))
+
+
+df <- test_2 
+fig3 <- df %>% accumulate_by(~year)
+
+fig3 <- fig3 %>%
+  plot_ly(
+    x = ~year, 
+    y = ~a_mean,
+    split = ~continent,
+    frame = ~frame, 
+    type = 'scatter',
+    mode = 'markers',
+    color = ~continent,
+    showlegend=FALSE,
+    colors = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF"),
+    line = list(shape = "linear"),
+    inherit = TRUE
+  )
+
+fig3 <- fig3 %>% layout(
+  xaxis = list(
+    title=list(text="years", font=list(size=14)),
+    zeroline = T
+  ),
+  yaxis = list(
+    title=list(text="years school avg", font=list(size=14))
+  )
+) 
+
+
+
+fig <- subplot(fig1, fig2, fig3, nrows = 3, shareX = F, shareY = F, titleY = T, titleX = T,margin = 0.07) %>% 
+            layout(title = list(text = paste0('Evolution of life expectancy and gdp per capita against years education by country',
+                                    '<br>',
+                                    '<sup>',
+                                    'Countries with more years of education on average have higher life expectancy and income',
+                                    '</sup>')))
+
+fig <- fig %>% animation_opts(
+  frame = 1000, 
+  transition = 0, 
+  redraw = FALSE
+)
+fig <- fig %>% animation_slider(
+  hide = F
+)
+fig <- fig %>% animation_button(
+  currentvalue = list(prefix = "YEAR ", font = list(color="red"))
+)
+fig %>% style(fig, showlegend = FALSE)  %>%
+  layout(
+    images = list(
+      source = base64enc::dataURI(file = "myplot.png"),
+      x = 0.75, y = 0.59, 
+      sizex = 0.3, sizey = 0.3,
+      xref = "paper", yref = "paper", 
+      xanchor = "left", yanchor = "bottom"
+    ))
+```
+```{r message=FALSE, warning=FALSE, fig.height=6, fig.width=8}
+data <- read.csv('average-oecd-education-expenditure-by-source-of-funding-gdp.csv')
+colnames(data) <- c("ent", "code", "year","private", "public" )
+
+fig <- plot_ly(data, x = ~year, y = ~private, name = 'private expenditure', type = 'scatter', mode = 'none', stackgroup = 'one', fillcolor = '#F5FF8D') %>%  layout(yaxis = list(ticksuffix = "%",  range = c(0, 4)))
+fig <- fig %>% add_trace(y = ~public, name = 'public expenditure', fillcolor = '#4C74C9')
+fig <- fig %>% layout(title = 'Average OECD non-tertiary education expenditure by source of funding',
+         xaxis = list(title = "",
+                      showgrid = FALSE),
+         yaxis = list(title = "Expenditures (in percent of PIB)",
+                      showgrid = FALSE))
+
+fig
+```
+
+```{r message=FALSE, warning=FALSE, fig.height=10, fig.width=12}
+data_2 = read.csv('gender-ratios-for-mean-years-of-schooling.csv')
+
+accumulate_by <- function(dat, var) {
+  var <- lazyeval::f_eval(var, dat)
+  lvls <- plotly:::getLevels(var)
+  dats <- lapply(seq_along(lvls), function(x) {
+    cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
+  })
+  dplyr::bind_rows(dats)
+}
+
+df <- data_2 
+fig <- df %>% accumulate_by(~Year)
+
+fig <- fig %>%
+  plot_ly(
+    x = ~Year, 
+    y = ~Regional.female.to.male.years.schooling..Lee.Lee..2016..,
+    split = ~Entity,
+    frame = ~frame, 
+    type = 'scatter',
+    mode = 'markers', 
+    line = list(shape = "linear"),
+    inherit = TRUE
+  )
+fig <- fig %>% layout(
+  xaxis = list(
+    title = "Year",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "Female-to-male ratio of average years of schooling,",
+    zeroline = F
+  )
+) 
+fig <- fig %>% animation_opts(
+  frame = 500, 
+  transition = 0, 
+  redraw = FALSE
+)
+fig <- fig %>% animation_slider(
+  hide = T
+)
+fig <- fig %>% animation_button(
+  x = 1, xanchor = "right", y = 0, yanchor = "bottom"
+)
+fig %>%
+  layout(title = list(text = paste0('Gender ratios for mean years of schooling, 1870 to 2010',
+                                    '<br>',
+                                    '<sup>',
+                                    'Female-to-male ratio of average years of schooling, expressed in percents. All education levels for population aged 15-64',
+                                    '</sup>')))
+
+
+```
+
+```{r message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+library(dplyr)
+library(countrycode)
+
+prueba = read.csv('correlation-between-child-mortality-and-mean-years-of-schooling-for-those-aged-15-and-older.csv')
+prueba <- prueba[prueba$Year %in% c(1950, 1955, 1960, 1965, 1970, 1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010), ]
+prueba <- na.omit(prueba)
+
+prueba$Continent <- countrycode(sourcevar = prueba[, "Entity"],
+                            origin = "country.name",
+                            destination = "continent")
+
+colnames(prueba) <- c('country', 'code', 'year', 'under_five_mortality', 'mean_years_schooling_women', 'population', 'continent')
+
+p <- ggplot(prueba, aes(under_five_mortality, mean_years_schooling_women)) +
+  geom_point(aes(frame = year, ids = country,  color = continent), alpha = 0.6) +
+  scale_x_log10() +
+  labs(title = 'Gapminder',
+       subtitle = 'Gapminder',
+       x = 'percent under five mortality',
+       y = 'mean years schooling women') +
+  theme_minimal()
+
+
+fig <- ggplotly(p) %>% 
+  animation_opts(
+    1000, easing = "elastic", redraw = FALSE
+  ) %>% 
+  animation_slider(
+    currentvalue = list(prefix = "YEAR ", font = list(color="red"))
+  )  %>%
+  layout(title = list(text = paste0('Under five mortality against women education mean years',
+                                    '<br>',
+                                    '<sup>',
+                                    'Women’s education is inversely correlated with child mortality',
+                                    '</sup>')))
+fig
+```
+
+```{r message=FALSE, warning=FALSE, fig.height=8, fig.width=8}
+prueba_2 <- prueba %>%
+  group_by(year, continent) %>%
+  summarise(a_mean=(mean(under_five_mortality)))
+
+
+fig1 <- plot_ly(data = prueba_2, type = "bar",
+        x = ~continent, y = ~a_mean, frame = ~year, showlegend = FALSE) 
+
+fig1 <- fig1 %>% layout(
+  xaxis = list(
+    title = "Continent",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "percent under five mirtality",
+    zeroline = F
+  )
+) 
+
+
+df <- prueba_2 
+fig2 <- df %>% accumulate_by(~year)
+
+fig2 <- fig2 %>%
+  plot_ly(
+    x = ~year, 
+    y = ~a_mean,
+    split = ~continent,
+    frame = ~frame, 
+    type = 'scatter',
+    mode = 'markers', 
+    line = list(shape = "linear"),
+    inherit = TRUE
+  )
+fig2 <- fig2 %>% layout(
+  xaxis = list(
+    title = "Year",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "under_five_mortality",
+    zeroline = F
+  )
+) 
+
+fig <- subplot(fig1, fig2, nrows = 2, shareX = F) %>% 
+  layout(title = 'Evolution of under five mortality by continent')
+
+fig <- fig %>% animation_opts(
+  frame = 1000, 
+  transition = 0, 
+  redraw = FALSE
+)
+
+fig
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE, fig.height=10, fig.width=12}
+gob_exp = read.csv('liberal-democracy-today-vs-past-schooling.csv')
+gob_exp <- na.omit(gob_exp)
+gob_exp$continent <- countrycode(sourcevar = gob_exp[, "Entity"],
+                            origin = "country.name",
+                            destination = "continent")
+gob_exp_2 <- gob_exp %>%
+  group_by(Entity, continent) %>%
+  summarise(years_schooling_past=(mean(Total.years.of.schooling..Lee.Lee..2016..)),
+            libdem_vdem_owid = last(libdem_vdem_owid, order_by = Year),
+            year = last(Year, order_by = Year),
+            population = (mean(Population..historical.estimates.)))
+
+gob_exp_2 <- na.omit(gob_exp_2)
+
+fig_1 <- gob_exp_2 %>%
+    ggplot(aes(x = years_schooling_past, y = libdem_vdem_owid, size = population, color = continent, ids = Entity)) +
+    scale_color_manual(values = c("#F15772", "#00FF00",
+                                "#FBE700", "#000080", "#FF00FF")) +
+        geom_point(alpha = 0.6, ) + 
+        labs(title = 'Liberal democracy today vs. past average years of schooling',
+             subtitle = 'Year 2021',
+             caption = 'Data from Kaggle',
+             x = 'Mean years of schooling in 1970',
+             y = 'Liberal democracy') +
+  theme_minimal()
+
+ggplotly(fig_1) %>%
+  layout(
+    images = list(
+      source = base64enc::dataURI(file = "myplot.png"),
+      x = 0.8, y = 0.01, 
+      sizex = 0.5, sizey = 0.5,
+      xref = "paper", yref = "paper", 
+      xanchor = "left", yanchor = "bottom"
+    )) %>%
+  layout(title = list(text = paste0('Liberal democracy today vs. past average years of schooling',
+                                    '<br>',
+                                    '<sup>',
+                                    "impact of investment in education in the past",
+                                    '</sup>')))
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
